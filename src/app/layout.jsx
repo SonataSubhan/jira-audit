@@ -1,5 +1,7 @@
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import LanguageProvider from '@/lib/LanguageProvider';
+import { AuditStateProvider } from '@/lib/AuditStateProvider';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -22,7 +24,11 @@ export default function RootLayout({ children }) {
   return (
     <html lang="az" className="dark">
       <body className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-black text-white`}>
-        {children}
+        <LanguageProvider>
+          <AuditStateProvider>
+            {children}
+          </AuditStateProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import LoginScreen from '@/components/LoginScreen';
 import Dashboard from '@/components/Dashboard';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import Toaster from '@/components/ui/Toaster';
 import { ToastProvider } from '@/lib/useToast';
 
@@ -11,7 +12,7 @@ export default function Home() {
 
   return (
     <ToastProvider>
-      {/* Dot-grid overlay */}
+      <LanguageSwitcher />
       <div className="fixed inset-0 z-0 pointer-events-none dot-grid opacity-40" />
 
       <div className="relative z-10 min-h-screen">

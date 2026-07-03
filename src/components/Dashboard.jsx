@@ -7,36 +7,44 @@ import Button from '@/components/ui/Button';
 import ControlTable from '@/components/ControlTable';
 import ProgressBar from '@/components/ProgressBar';
 import EmailModal from '@/components/EmailModal';
-import { nistData } from '@/lib/nistData';
-import { isoData } from '@/lib/isoData';
 import { exportToPDF } from '@/lib/pdfExport';
 import { useToast } from '@/lib/useToast';
+import { useLanguage } from '@/lib/LanguageProvider';
+import { getControls } from '@/lib/data';
+import { useAuditState } from '@/lib/AuditStateProvider';
 
 export default function Dashboard({ auditInfo, onLogout }) {
-  const [nistState, setNistState] = useState({});
-  const [isoState,  setIsoState]  = useState({});
+  const { lang, t } = useLanguage();
+  const { responses, updateResponse, resetResponses } = useAuditState();
   const [activeTab, setActiveTab] = useState('nist');
   const [isExporting, setIsExporting] = useState(false);
   const [isEmailOpen,  setIsEmailOpen]  = useState(false);
   const { toast } = useToast();
+  const controls = getControls(lang);
+  const nistData = controls.nist;
+  const isoData = controls.iso;
 
-  const handleNist = (code, state) => setNistState((p) => ({ ...p, [code]: state }));
-  const handleIso  = (code, state) => setIsoState( (p) => ({ ...p, [code]: state }));
+  const handleStateChange = (code, state) => updateResponse(code, state);
 
   const handleExportPDF = async () => {
     setIsExporting(true);
-    toast({ title: 'PDF Hazırlanır...', description: 'Hesabatınız formalaşdırılır, zəhmət olmasa gözləyin.' });
-    const ok = await exportToPDF(auditInfo, nistState, isoState);
+    toast({ title: t('pdfProcessing'), description: t('pdfProcessing') });
+    const ok = await exportToPDF(auditInfo, responses, lang);
     setIsExporting(false);
     if (ok) {
-      toast({ title: 'Uğurlu əməliyyat', description: 'PDF hesabatı uğurla yükləndi.' });
+      toast({ title: t('pdfReady'), description: t('pdfReady') });
     } else {
-      toast({ title: 'Xəta', description: 'PDF hesabatını yaratmaq mümkün olmadı.', variant: 'destructive' });
+      toast({ title: t('emailErrorTitle'), description: t('emailErrorDescription'), variant: 'destructive' });
     }
   };
 
-  const currentStates = activeTab === 'nist' ? nistState : isoState;
-  const currentTotal  = activeTab === 'nist' ? nistData.length : isoData.length;
+  const currentStates = Object.fromEntries(
+    (activeTab === 'nist' ? nistData : isoData).map((control) => [
+      control.code,
+      responses[control.code] || { status: 'NOT_EVALUATED', notes: '' },
+    ])
+  );
+  const currentTotal = activeTab === 'nist' ? nistData.length : isoData.length;
 
   return (
     <div className="flex flex-col min-h-screen w-full max-w-[1600px] mx-auto">
@@ -75,7 +83,7 @@ export default function Dashboard({ auditInfo, onLogout }) {
               {isExporting
                 ? <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
                 : <FileDown className="w-4 h-4 text-cyan-400" />}
-              <span className="hidden sm:inline">PDF Çıxar</span>
+              <span className="hidden sm:inline">{t('pdfExport')}</span>
             </Button>
 
             <Button
@@ -84,7 +92,7 @@ export default function Dashboard({ auditInfo, onLogout }) {
               className="gap-2"
             >
               <Mail className="w-4 h-4" />
-              <span className="hidden sm:inline">Hesabat Göndər</span>
+              <span className="hidden sm:inline">{t('reportTitle')}</span>
             </Button>
 
             <button
@@ -118,10 +126,10 @@ export default function Dashboard({ auditInfo, onLogout }) {
           <ProgressBar states={currentStates} totalControls={currentTotal} />
 
           <TabsContent value="nist">
-            <ControlTable controls={nistData} states={nistState} onStateChange={handleNist} />
+            <ControlTable controls={nistData} states={responses} onStateChange={handleStateChange} />
           </TabsContent>
           <TabsContent value="iso">
-            <ControlTable controls={isoData}  states={isoState}  onStateChange={handleIso}  />
+            <ControlTable controls={isoData} states={responses} onStateChange={handleStateChange} />
           </TabsContent>
         </Tabs>
       </main>
@@ -130,8 +138,8 @@ export default function Dashboard({ auditInfo, onLogout }) {
         open={isEmailOpen}
         onOpenChange={setIsEmailOpen}
         auditInfo={auditInfo}
-        nistState={nistState}
-        isoState={isoState}
+        responses={responses}
+        lang={lang}
       />
     </div>
   );

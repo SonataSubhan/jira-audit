@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, MessageSquare } from 'lucide-react';
 import Textarea from '@/components/ui/Textarea';
-import { getStatusLabel, getStatusColor } from '@/lib/status';
+import { getStatusLabel, getStatusColor, STATUS_ENUM } from '@/lib/status';
+import { useLanguage } from '@/lib/LanguageProvider';
 
-const STATUS_BUTTONS = [
-  { status: 'beli',   label: 'Bəli' },
-  { status: 'qismen', label: 'Qismən' },
-  { status: 'xeyr',  label: 'Xeyr' },
-  { status: 'nt',     label: 'N/T' },
+const STATUS_OPTIONS = [
+  { status: STATUS_ENUM.YES, key: 'yes' },
+  { status: STATUS_ENUM.PARTIAL, key: 'partial' },
+  { status: STATUS_ENUM.NO, key: 'no' },
+  { status: STATUS_ENUM.NOT_EVALUATED, key: 'na' },
 ];
 
 export default function ControlTable({ controls, states, onStateChange }) {
@@ -19,30 +20,32 @@ export default function ControlTable({ controls, states, onStateChange }) {
     setExpandedRows((prev) => ({ ...prev, [code]: !prev[code] }));
 
   const handleStatus = (code, newStatus) => {
-    const cur = states[code] || { status: null, notes: '' };
+    const cur = states[code] || { status: STATUS_ENUM.NOT_EVALUATED, notes: '' };
     onStateChange(code, { ...cur, status: newStatus });
     if (!expandedRows[code]) setExpandedRows((prev) => ({ ...prev, [code]: true }));
   };
 
   const handleNotes = (code, notes) => {
-    const cur = states[code] || { status: null, notes: '' };
+    const cur = states[code] || { status: STATUS_ENUM.NOT_EVALUATED, notes: '' };
     onStateChange(code, { ...cur, notes });
   };
+
+  const { t, lang } = useLanguage();
 
   return (
     <div className="border border-white/10 rounded-sm bg-black ">
       {/* Desktop header */}
       <div className="hidden md:grid md:grid-cols-[140px_1fr_auto] gap-0 border-b border-white/10 bg-white/5 text-[11px] font-mono uppercase text-white/50 sticky top-14 z-10">
-        <div className="px-4 py-3">Nəzarət Kodu</div>
-        <div className="px-4 py-3">Nəzarət Vasitəsinin Təsviri</div>
-        <div className="px-4 py-3 text-center min-w-[260px]">Status</div>
+        <div className="px-4 py-3">{t('controlCode')}</div>
+        <div className="px-4 py-3">{t('controlDescription')}</div>
+        <div className="px-4 py-3 text-center min-w-[260px]">{t('status')}</div>
       </div>
 
       <div>
         {controls.map((control) => {
-          const state = states[control.code] || { status: null, notes: '' };
+          const state = states[control.code] || { status: STATUS_ENUM.NOT_EVALUATED, notes: '' };
           const isExpanded = !!expandedRows[control.code];
-          const color = state.status ? getStatusColor(state.status) : null;
+          const color = getStatusColor(state.status);
 
           return (
             <div key={control.code} className="border-b border-white/5 last:border-0">
@@ -69,11 +72,11 @@ export default function ControlTable({ controls, states, onStateChange }) {
                   className="px-4 py-3 flex gap-1 items-center justify-end min-w-[260px] flex-wrap"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {STATUS_BUTTONS.map(({ status, label }) => (
+                  {STATUS_OPTIONS.map(({ status, key }) => (
                     <StatusBtn
                       key={status}
                       status={status}
-                      label={label}
+                      label={t(key)}
                       current={state.status}
                       onClick={() => handleStatus(control.code, status)}
                     />
@@ -103,7 +106,7 @@ export default function ControlTable({ controls, states, onStateChange }) {
                           backgroundColor: color + '18',
                         }}
                       >
-                        {getStatusLabel(state.status)}
+                        {getStatusLabel(state.status, lang)}
                       </span>
                     )}
                   </div>
@@ -114,11 +117,11 @@ export default function ControlTable({ controls, states, onStateChange }) {
                     className="flex gap-1 flex-wrap"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {STATUS_BUTTONS.map(({ status, label }) => (
+                    {STATUS_OPTIONS.map(({ status, key }) => (
                       <StatusBtn
                         key={status}
                         status={status}
-                        label={label}
+                        label={t(key)}
                         current={state.status}
                         onClick={() => handleStatus(control.code, status)}
                       />
@@ -132,7 +135,7 @@ export default function ControlTable({ controls, states, onStateChange }) {
                 <div className="bg-white/[0.02] px-4 sm:px-6 py-5 border-t border-white/5 grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <h4 className="text-[10px] font-mono text-white/40 uppercase mb-3">
-                      Tam Təsvir
+                      {t('fullDescription')}
                     </h4>
                     <div className="text-sm text-white/80 leading-relaxed p-4 bg-black/50 border border-white/5 rounded-sm break-words">
                       {control.description || control.name}
@@ -140,12 +143,12 @@ export default function ControlTable({ controls, states, onStateChange }) {
                   </div>
                   <div>
                     <h4 className="text-[10px] font-mono text-white/40 uppercase mb-3 flex items-center gap-1.5">
-                      <MessageSquare className="w-3 h-3" /> Auditorun Qeydləri
+                      <MessageSquare className="w-3 h-3" /> {t('auditorNotes')}
                     </h4>
                     <Textarea
                       value={state.notes}
                       onChange={(e) => handleNotes(control.code, e.target.value)}
-                      placeholder="Bu nəzarət vasitəsi ilə bağlı qeydlərinizi bura yazın..."
+                      placeholder={t('notesPlaceholder')}
                     />
                   </div>
                 </div>

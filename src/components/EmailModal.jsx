@@ -7,35 +7,14 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Label from '@/components/ui/Label';
 import { useToast } from '@/lib/useToast';
-import { nistData } from '@/lib/nistData';
-import { isoData } from '@/lib/isoData';
-import { getStatusLabel } from '@/lib/status';
+import { useLanguage } from '@/lib/LanguageProvider';
+import { createPdfBase64 } from '@/lib/pdfExport';
 
-export default function EmailModal({ open, onOpenChange, auditInfo, nistState, isoState }) {
+export default function EmailModal({ open, onOpenChange, auditInfo, responses, lang }) {
   const [email, setEmail] = useState('');
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
-
-  const buildTable = (controls, stateMap, title) => {
-    let rows = '';
-    controls.forEach((c) => {
-      const s = stateMap[c.code];
-      if (s?.status) {
-        rows += `<tr>
-          <td style="border:1px solid #ccc;padding:6px"><strong>${c.code}</strong></td>
-          <td style="border:1px solid #ccc;padding:6px">${c.name}</td>
-          <td style="border:1px solid #ccc;padding:6px">${getStatusLabel(s.status)}</td>
-          <td style="border:1px solid #ccc;padding:6px">${s.notes || '-'}</td>
-        </tr>`;
-      }
-    });
-    if (!rows) return '';
-    return `<h2 style="font-family:sans-serif;color:#444">${title}</h2>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;font-family:sans-serif;font-size:13px">
-      <tr style="background:#f5f5f5"><th>Kod</th><th>Nəzarət</th><th>Status</th><th>Qeydlər</th></tr>
-      ${rows}
-    </table><br/>`;
-  };
+  const { t } = useLanguage();
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -43,40 +22,34 @@ export default function EmailModal({ open, onOpenChange, auditInfo, nistState, i
     setIsSending(true);
 
     try {
-      const htmlContent = `
-        <h1 style="font-family:sans-serif;color:#333">Kibertəhlükəsizlik Uyğunluq Auditi Hesabatı</h1>
-        <p><strong>Şirkət:</strong> ${auditInfo.companyName}</p>
-        <p><strong>Auditor:</strong> ${auditInfo.auditorName}</p>
-        <p><strong>Tarix:</strong> ${auditInfo.auditDate}</p>
-        <hr/>
-        ${buildTable(nistData, nistState, 'NIST CSF 2.0 Nəticələri')}
-        ${buildTable(isoData, isoState, 'ISO/IEC 27001 Nəticələri')}
-      `;
-
-      const serviceId  = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
-      const templateId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
-      const publicKey  = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
-
-      if (serviceId && templateId && publicKey) {
-        const emailjs = (await import('@emailjs/browser')).default;
-        await emailjs.send(serviceId, templateId, {
-          to_email:     email,
-          company_name: auditInfo.companyName,
-          auditor_name: auditInfo.auditorName,
-          audit_date:   auditInfo.auditDate,
-          audit_html:   htmlContent,
-        }, publicKey);
-      } else {
-        // Demo mode — no keys configured yet
-        await new Promise((r) => setTimeout(r, 1200));
+      const pdfData = await createPdfBase64(auditInfo, responses, lang);
+      if (!pdfData) {
+        throw new Error('PDF generation failed');
       }
 
-      toast({ title: 'Hesabat uğurla göndərildi', description: `${email} ünvanına audit hesabatı göndərildi.` });
+      const response = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: email,
+          lang,
+          auditInfo,
+          responses,
+          pdfData,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to send');
+      }
+
+      toast({ title: t('emailSentTitle'), description: t('emailSentDescription') });
       onOpenChange(false);
       setEmail('');
     } catch (err) {
       console.error(err);
-      toast({ title: 'Xəta baş verdi', description: 'Hesabatı göndərmək mümkün olmadı.', variant: 'destructive' });
+      toast({ title: t('emailErrorTitle'), description: t('emailErrorDescription'), variant: 'destructive' });
     } finally {
       setIsSending(false);
     }
@@ -86,22 +59,20 @@ export default function EmailModal({ open, onOpenChange, auditInfo, nistState, i
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Hesabat Göndər</DialogTitle>
-          <DialogDescription>
-            Audit hesabatını göndərmək istədiyiniz e-poçt ünvanını daxil edin.
-          </DialogDescription>
+          <DialogTitle>{t('reportTitle')}</DialogTitle>
+          <DialogDescription>{t('reportDescription')}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSend} className="flex flex-col gap-5 mt-2">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="email">E-poçt ünvanı</Label>
+            <Label htmlFor="email">{t('emailLabel')}</Label>
             <Input
               id="email"
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@shirket.com"
+              placeholder={t('emailPlaceholder')}
             />
           </div>
 
@@ -112,7 +83,7 @@ export default function EmailModal({ open, onOpenChange, auditInfo, nistState, i
               onClick={() => onOpenChange(false)}
               disabled={isSending}
             >
-              Ləğv et
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
@@ -121,8 +92,8 @@ export default function EmailModal({ open, onOpenChange, auditInfo, nistState, i
               className="gap-2"
             >
               {isSending
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> GÖNDƏRİLİR...</>
-                : <><Send className="w-4 h-4" /> GÖNDƏR</>}
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> {t('emailSending')}</>
+                : <><Send className="w-4 h-4" /> {t('send')}</>}
             </Button>
           </DialogFooter>
         </form>
