@@ -8,7 +8,6 @@ import Input from '@/components/ui/Input';
 import Label from '@/components/ui/Label';
 import { useToast } from '@/lib/useToast';
 import { useLanguage } from '@/lib/LanguageProvider';
-import { createPdfBase64 } from '@/lib/pdfExport';
 
 export default function EmailModal({ open, onOpenChange, auditInfo, responses, lang }) {
   const [email, setEmail] = useState('');
@@ -22,11 +21,6 @@ export default function EmailModal({ open, onOpenChange, auditInfo, responses, l
     setIsSending(true);
 
     try {
-      const pdfData = await createPdfBase64(auditInfo, responses, lang);
-      if (!pdfData) {
-        throw new Error('PDF generation failed');
-      }
-
       const response = await fetch('/api/send-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -35,7 +29,6 @@ export default function EmailModal({ open, onOpenChange, auditInfo, responses, l
           lang,
           auditInfo,
           responses,
-          pdfData,
         }),
       });
 

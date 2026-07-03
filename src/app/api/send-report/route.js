@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
 import { defaultLang, localeStrings } from '@/lib/i18n';
 import { getStatusLabel } from '@/lib/status';
 import { getControls } from '@/lib/data';
@@ -75,6 +76,48 @@ function buildEmailHtml(auditInfo, responses, lang, nistControls, isoControls) {
   `;
 }
 
+function createPdfBuffer(auditInfo, responses, lang, nistControls, isoControls) {
+  const strings = localeStrings[lang] || localeStrings[defaultLang];
+  const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
+  const chunks = [];
+
+  doc.on('data', (chunk) => chunks.push(chunk));
+
+  const finished = new Promise((resolve, reject) => {
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+
+  doc.fontSize(18).text(strings.pdfReportTitle, { align: 'center' });
+  doc.moveDown(0.5);
+  doc.fontSize(10).text(`${strings.auditMetaCompany}: ${auditInfo.companyName}`);
+  doc.text(`${strings.auditMetaAuditor}: ${auditInfo.auditorName}`);
+  doc.text(`${strings.auditMetaDate}: ${auditInfo.auditDate}`);
+  doc.moveDown(1);
+
+  const renderControls = (title, controls) => {
+    doc.fontSize(14).text(title);
+    doc.moveDown(0.5);
+
+    controls.forEach((control) => {
+      const state = responses[control.code] || { status: 'NOT_EVALUATED', notes: '' };
+      doc.fontSize(10).text(`${control.code} — ${control.name}`);
+      doc.fontSize(10).text(`${strings.status}: ${getStatusLabel(state.status, lang)}`);
+      doc.fontSize(10).text(`${strings.auditorNotes}: ${state.notes || '-'}
+`);
+      doc.moveDown(0.4);
+    });
+
+    doc.addPage();
+  };
+
+  renderControls(strings.pdfNistHeading, nistControls);
+  renderControls(strings.pdfIsoHeading, isoControls);
+
+  doc.end();
+  return finished;
+}
+
 export async function POST(request) {
   if (!request) {
     return NextResponse.json({ error: 'Request missing' }, { status: 400 });
@@ -94,10 +137,6 @@ export async function POST(request) {
 
   if (!smtpHost || !smtpUser || !smtpPass) {
     return NextResponse.json({ error: 'SMTP is not configured. Please set SMTP environment variables.' }, { status: 500 });
-  }
-
-  if (!body.pdfData) {
-    return NextResponse.json({ error: 'PDF data is missing from the request.' }, { status: 400 });
   }
 
   try {
@@ -122,6 +161,8 @@ export async function POST(request) {
     await transporter.verify();
 
     const html = buildEmailHtml(auditInfo, responses || {}, userLang, nistData, isoData);
+    const pdfBuffer = await createPdfBuffer(auditInfo, responses || {}, userLang, nistData, isoData);
+    const pdfBase64 = pdfBuffer.toString('base64');
     const subject = `${strings.welcomeTitle} — ${auditInfo.companyName}`;
 
     await transporter.sendMail({
@@ -132,7 +173,7 @@ export async function POST(request) {
       attachments: [
         {
           filename: `audit-report-${auditInfo.companyName}.pdf`,
-          content: body.pdfData,
+          content: pdfBase64,
           encoding: 'base64',
         },
       ],
